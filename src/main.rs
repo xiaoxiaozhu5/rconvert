@@ -1,4 +1,6 @@
 use std::path::{Path, PathBuf};
+use std::io::BufWriter;
+use std::io::Write;
 
 use solp::parse_file;
 use solp::Consume;
@@ -6,16 +8,25 @@ use solp::api::Solution;
 
 use quick_xml::events::{Event};
 use quick_xml::reader::Reader;
+use quick_xml::se::to_string;
 
 use structopt::StructOpt;
 
-struct MyConsumer;
+use serde::{Serialize, Deserialize};
+
+struct MyConsumer {
+
+};
 
 impl Consume for MyConsumer {
     fn ok(&mut self, solution: &Solution<'_>) {
         // println!("Successful parsing: {:?}", solution);
         //let serialized = serde_json::to_string_pretty(&solution).unwrap();
         //println!("{}", serialized);
+
+        generate_workspace_file(solution);
+        return;
+
         let full_path = Path::new(solution.path);
         let path = full_path.parent().unwrap();
         for project in solution.projects.iter() {
@@ -70,6 +81,57 @@ impl Consume for MyConsumer {
     fn err(&self, path: &str) {
         println!("Error parsing file: {}", path);
     }
+}
+
+#[derive(Serialize, Deserialize)]
+struct File {
+    #[serde(rename = "@path")]
+    pub Path: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Project {
+    #[serde(rename = "@path")]
+    pub Path: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Workspace {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub File: Option<Vec<File>>,
+    pub Project: Vec<Project>
+}
+
+impl Workspace {
+    pub fn new(projects: Vec<Project>, files: Option<Vec<File>>) -> Self {
+        Workspace {
+            File: files,
+            Project: projects,
+        }
+    }
+}
+
+fn generate_workspace_file(solution: &Solution<'_>) {
+    let full_path = Path::new(solution.path);
+    let path = full_path.parent().unwrap();
+
+    let mut projects: Vec<Project> = Vec::new();
+    for project in solution.projects.iter() {
+        let mut project_path = format!("{}\\{}", path.display(), project.path_or_uri);
+        if cfg!(not(target_os = "windows")) {
+            let tmp_path = project_path.replace("\\", "/");
+            project_path = tmp_path;
+        }
+        //println!("name:{} url:{}", project.name, project_path);
+        projects.push( Project { Path: project_path } );
+    }
+    let workspace = Workspace::new(projects, None);
+    let xml = to_string(&workspace).unwrap();
+    // println!("{}", xml);
+
+    let mut writer = BufWriter::new(std::fs::File::create("test.pnws").unwrap());
+    writer.write_all(&xml.as_bytes()).unwrap();
+    writer.flush().unwrap();
 }
 
 #[derive(StructOpt)]
