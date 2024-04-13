@@ -194,7 +194,8 @@ fn main() {
     let mut con = MyConsumer { projects: Vec::new() };
     let _result = parse_file(&path, &mut con);
     for prj in con.projects {
-        let name = prj.path;
+        //let name = prj.path;
+        let name = PathBuf::from(prj.path).file_stem().unwrap().to_string_lossy().to_string();
         let mut magic_folder: Vec<MagicFolder> = Vec::new();
         let mut source_files: Vec<File> = Vec::new();
         let mut header_files: Vec<File> = Vec::new();
