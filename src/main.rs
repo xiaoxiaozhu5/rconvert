@@ -15,9 +15,9 @@ use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
 
 struct content {
-   path: String,
-   sources: Vec<String>,
-   headers: Vec<String>,
+    path: String,
+    sources: Vec<String>,
+    headers: Vec<String>,
 }
 
 struct MyConsumer {
@@ -39,7 +39,7 @@ impl Consume for MyConsumer {
                 let tmp_path = project_path.replace("\\", "/");
                 project_path = tmp_path;
             }
-            println!("name:{} url:{}", project.name, project_path);
+            //println!("name:{} url:{}", project.name, project_path);
             let mut reader = Reader::from_file(&project_path).unwrap();
 
             let mut ct = content { path: project_path, sources: Vec::new(), headers: Vec::new() };
@@ -156,25 +156,30 @@ impl Workspace {
     }
 }
 
-fn generate_workspace_file(solution: &Solution<'_>) {
-    let full_path = Path::new(solution.path);
-    let path = full_path.parent().unwrap();
-
+fn generate_workspace_file(allprojects : MyConsumer, dest: String) {
     let mut projects: Vec<Project> = Vec::new();
-    for project in solution.projects.iter() {
-        let mut project_path = format!("{}\\{}", path.display(), project.path_or_uri);
-        if cfg!(not(target_os = "windows")) {
-            let tmp_path = project_path.replace("\\", "/");
-            project_path = tmp_path;
-        }
-        //println!("name:{} url:{}", project.name, project_path);
-        projects.push( Project { Path: Some(project_path), name: None, File: None, MagicFolder: None } );
+    for project in allprojects.projects.iter() {
+        let sln_path = PathBuf::from(&project.path);
+        let sln_parent_path = sln_path.parent().unwrap();
+        let sln_name = sln_path.file_stem().unwrap();
+        let ext = String::from(".pnproj");
+        let name = sln_name.to_os_string().into_string().unwrap();
+        let output_full_name = format!("{}{}", name, ext);
+        let output_full_path = sln_parent_path.join(output_full_name);
+        projects.push( Project { Path: Some(output_full_path.as_os_str().to_string_lossy().to_string()), name: None, File: None, MagicFolder: None } );
     }
     let workspace = Workspace::new(projects, None);
     let xml = to_string(&workspace).unwrap();
     // println!("{}", xml);
 
-    let mut writer = BufWriter::new(std::fs::File::create("test.pnws").unwrap());
+    let sln_path = PathBuf::from(&dest);
+    let sln_parent_path = sln_path.parent().unwrap();
+    let sln_name = sln_path.file_stem().unwrap();
+    let ext = String::from(".pnws");
+    let name = sln_name.to_os_string().into_string().unwrap();
+    let output_full_name = format!("{}{}", name, ext);
+    let output_full_path = sln_parent_path.join(output_full_name);
+    let mut writer = BufWriter::new(std::fs::File::create(output_full_path).unwrap());
     writer.write_all(&xml.as_bytes()).unwrap();
     writer.flush().unwrap();
 }
@@ -183,36 +188,46 @@ fn generate_workspace_file(solution: &Solution<'_>) {
 struct Cli {
     #[structopt(short, long, parse(from_os_str))]
     sln: PathBuf,
-    #[structopt(short, long, parse(from_os_str))]
-    output: PathBuf,
 }
 
 fn main() {
     let args = Cli::from_args();
     let path = args.sln.into_os_string().into_string().unwrap();
-    let output = args.output.into_os_string().into_string().unwrap();
     let mut con = MyConsumer { projects: Vec::new() };
     let _result = parse_file(&path, &mut con);
-    for prj in con.projects {
+    for prj in &con.projects {
         //let name = prj.path;
-        let name = PathBuf::from(prj.path).file_stem().unwrap().to_string_lossy().to_string();
+        let name = PathBuf::from(&prj.path).file_stem().unwrap().to_string_lossy().to_string();
         let mut magic_folder: Vec<MagicFolder> = Vec::new();
         let mut source_files: Vec<File> = Vec::new();
         let mut header_files: Vec<File> = Vec::new();
-        for hdr in prj.headers {
-            header_files.push( File { Path: hdr} );
+        for hdr in &prj.headers {
+            header_files.push( File { Path: hdr.to_string()} );
         }
-        for src in prj.sources {
-            source_files.push( File { Path: src} );
+        for src in &prj.sources {
+            source_files.push( File { Path: src.to_string()} );
         }
-        let mut source_folder = MagicFolder { exclude: String::from("CVS;.svn"), filter: String::from("*"), name: String::from("Source Files"), path: String::from(""), File: Some(source_files) };
-        let mut header_folder = MagicFolder { exclude: String::from("CVS;.svn"), filter: String::from("*"), name: String::from("Header Files"), path: String::from(""), File: Some(header_files) };
+        let mut source_folder = MagicFolder { exclude: String::from("CVS;.svn;.git;.vs"), filter: String::from("*.c;*.cpp;*.cc;*.cxx"), name: String::from("Source Files"), path: String::from(""), File: Some(source_files) };
+        let mut header_folder = MagicFolder { exclude: String::from("CVS;.svn;.git;.vs"), filter: String::from("*.h;*.hpp;*.hxx"), name: String::from("Header Files"), path: String::from(""), File: Some(header_files) };
         magic_folder.push(header_folder);
         magic_folder.push(source_folder);
         let project = Project { name: Some(name), MagicFolder: Some(magic_folder), Path: None, File: None };
         let xml = to_string(&project).unwrap();
-        let mut writer = BufWriter::new(std::fs::File::create("test.pnproj").unwrap());
-        writer.write_all(&xml.as_bytes()).unwrap();
-        writer.flush().unwrap();
+        let output_path = PathBuf::from(&prj.path);
+        let output_name = output_path.file_stem().unwrap();
+        let output_path = output_path.parent();
+        match output_path {
+            Some(p) => {
+                let ext = String::from(".pnproj");
+                let name = output_name.to_os_string().into_string().unwrap();
+                let output_full_name = format!("{}{}", name, ext);
+                let op = p.join(output_full_name);
+                let mut writer = BufWriter::new(std::fs::File::create(op).unwrap());
+                writer.write_all(&xml.as_bytes()).unwrap();
+                writer.flush().unwrap();
+            },
+            None => {}
+        }
     }
+    generate_workspace_file(con, path);
 }
