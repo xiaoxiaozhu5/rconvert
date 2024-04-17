@@ -202,10 +202,26 @@ fn main() {
         let mut source_files: Vec<File> = Vec::new();
         let mut header_files: Vec<File> = Vec::new();
         for hdr in &prj.headers {
-            header_files.push( File { Path: hdr.to_string()} );
+            let path = Path::new(hdr);
+            match path.parent() {
+                Some(p) => {
+                    header_files.push( File { Path: path.file_name().unwrap().to_string_lossy().to_string()} );
+                },
+                None => {
+                    header_files.push( File { Path: hdr.to_string()} );
+                }
+            }
         }
         for src in &prj.sources {
-            source_files.push( File { Path: src.to_string()} );
+            let path = Path::new(src);
+            match path.parent() {
+                Some(p) => {
+                    source_files.push( File { Path: path.file_name().unwrap().to_string_lossy().to_string()} );
+                },
+                None => {
+                    source_files.push( File { Path: src.to_string()} );
+                }
+            }
         }
         let mut source_folder = MagicFolder { exclude: String::from("CVS;.svn;.git;.vs"), filter: String::from("*.c;*.cpp;*.cc;*.cxx"), name: String::from("Source Files"), path: String::from(""), File: Some(source_files) };
         let mut header_folder = MagicFolder { exclude: String::from("CVS;.svn;.git;.vs"), filter: String::from("*.h;*.hpp;*.hxx"), name: String::from("Header Files"), path: String::from(""), File: Some(header_files) };
