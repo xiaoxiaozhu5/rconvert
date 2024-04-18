@@ -15,14 +15,14 @@ use structopt::StructOpt;
 
 use serde::{Serialize, Deserialize};
 
-struct content {
+struct Content {
     path: String,
     sources: Vec<String>,
     headers: Vec<String>,
 }
 
 struct MyConsumer {
-    projects: Vec<content>,
+    projects: Vec<Content>,
 }
 
 impl Consume for MyConsumer {
@@ -43,7 +43,7 @@ impl Consume for MyConsumer {
             //println!("name:{} url:{}", project.name, project_path);
             let mut reader = Reader::from_file(&project_path).unwrap();
 
-            let mut ct = content { path: project_path.clone(), sources: Vec::new(), headers: Vec::new() };
+            let mut ct = Content { path: project_path.clone(), sources: Vec::new(), headers: Vec::new() };
             let mut buffer = Vec::new();
             loop {
                 match reader.read_event_into(&mut buffer) {
@@ -107,12 +107,14 @@ impl Consume for MyConsumer {
     }
 }
 
+#[allow(non_snake_case)]
 #[derive(Serialize, Deserialize)]
 struct File {
     #[serde(rename = "@path")]
     pub Path: String,
 }
 
+#[allow(non_snake_case)]
 #[derive(Serialize, Deserialize)]
 struct MagicFolder {
     #[serde(rename = "@excludeFolders")]
@@ -127,6 +129,7 @@ struct MagicFolder {
     pub File: Option<Vec<File>>,
 }
 
+#[allow(non_snake_case)]
 #[derive(Serialize, Deserialize)]
 struct Project {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -141,6 +144,7 @@ struct Project {
     pub MagicFolder: Option<Vec<MagicFolder>>,
 }
 
+#[allow(non_snake_case)]
 #[derive(Serialize, Deserialize)]
 struct Workspace {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -214,7 +218,7 @@ fn main() {
         for hdr in &prj.headers {
             let path = Path::new(hdr);
             match path.parent() {
-                Some(p) => {
+                Some(_p) => {
                     header_files.push( File { Path: path.file_name().unwrap().to_string_lossy().to_string()} );
                 },
                 None => {
@@ -225,7 +229,7 @@ fn main() {
         for src in &prj.sources {
             let path = Path::new(src);
             match path.parent() {
-                Some(p) => {
+                Some(_p) => {
                     source_files.push( File { Path: path.file_name().unwrap().to_string_lossy().to_string()} );
                 },
                 None => {
@@ -233,8 +237,8 @@ fn main() {
                 }
             }
         }
-        let mut source_folder = MagicFolder { exclude: String::from("CVS;.svn;.git;.vs"), filter: String::from("*.c;*.cpp;*.cc;*.cxx"), name: String::from("Source Files"), path: String::from(""), File: Some(source_files) };
-        let mut header_folder = MagicFolder { exclude: String::from("CVS;.svn;.git;.vs"), filter: String::from("*.h;*.hpp;*.hxx"), name: String::from("Header Files"), path: String::from(""), File: Some(header_files) };
+        let source_folder = MagicFolder { exclude: String::from("CVS;.svn;.git;.vs"), filter: String::from("*.c;*.cpp;*.cc;*.cxx"), name: String::from("Source Files"), path: String::from(""), File: Some(source_files) };
+        let header_folder = MagicFolder { exclude: String::from("CVS;.svn;.git;.vs"), filter: String::from("*.h;*.hpp;*.hxx"), name: String::from("Header Files"), path: String::from(""), File: Some(header_files) };
         magic_folder.push(header_folder);
         magic_folder.push(source_folder);
         let project = Project { name: Some(name), MagicFolder: Some(magic_folder), Path: None, File: None };
