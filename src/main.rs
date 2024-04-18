@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::io::BufWriter;
 use std::io::Write;
@@ -42,12 +43,12 @@ impl Consume for MyConsumer {
             //println!("name:{} url:{}", project.name, project_path);
             let mut reader = Reader::from_file(&project_path).unwrap();
 
-            let mut ct = content { path: project_path, sources: Vec::new(), headers: Vec::new() };
+            let mut ct = content { path: project_path.clone(), sources: Vec::new(), headers: Vec::new() };
             let mut buffer = Vec::new();
             loop {
                 match reader.read_event_into(&mut buffer) {
                     Err(error) => break println!("{}", error),
-                    Ok(Event::Eof) => break println!("Completed."),
+                    Ok(Event::Eof) => break println!("parse {} completed.", project_path),
                     Ok(Event::Start(node)) => {
                         //println!("{:?}", node.name());
                         for attr in node.attributes() {
@@ -156,7 +157,7 @@ impl Workspace {
     }
 }
 
-fn generate_workspace_file(allprojects : MyConsumer, dest: String) {
+fn generate_workspace_file(allprojects : MyConsumer, dest: String, clean: bool) {
     let mut projects: Vec<Project> = Vec::new();
     for project in allprojects.projects.iter() {
         let sln_path = PathBuf::from(&project.path);
@@ -179,20 +180,29 @@ fn generate_workspace_file(allprojects : MyConsumer, dest: String) {
     let name = sln_name.to_os_string().into_string().unwrap();
     let output_full_name = format!("{}{}", name, ext);
     let output_full_path = sln_parent_path.join(output_full_name);
-    let mut writer = BufWriter::new(std::fs::File::create(output_full_path).unwrap());
-    writer.write_all(&xml.as_bytes()).unwrap();
-    writer.flush().unwrap();
+    if clean {
+        fs::remove_file(&output_full_path).unwrap_or_else(|why| {
+            println!("{} {:?}", output_full_path.display(), why.kind())
+        });
+    } else {
+        let mut writer = BufWriter::new(std::fs::File::create(output_full_path).unwrap());
+        writer.write_all(&xml.as_bytes()).unwrap();
+        writer.flush().unwrap();
+    }
 }
 
 #[derive(StructOpt)]
 struct Cli {
     #[structopt(short, long, parse(from_os_str))]
     sln: PathBuf,
+    #[structopt(short = "c", long = "clean", help = "remove generated pnws/pnproj")]
+    clean: bool,
 }
 
 fn main() {
     let args = Cli::from_args();
     let path = args.sln.into_os_string().into_string().unwrap();
+    let clean = args.clean;
     let mut con = MyConsumer { projects: Vec::new() };
     let _result = parse_file(&path, &mut con);
     for prj in &con.projects {
@@ -238,12 +248,18 @@ fn main() {
                 let name = output_name.to_os_string().into_string().unwrap();
                 let output_full_name = format!("{}{}", name, ext);
                 let op = p.join(output_full_name);
-                let mut writer = BufWriter::new(std::fs::File::create(op).unwrap());
-                writer.write_all(&xml.as_bytes()).unwrap();
-                writer.flush().unwrap();
+                if clean {
+                    fs::remove_file(&op).unwrap_or_else(|why| {
+                        println!("{} {:?}", op.display(), why.kind())
+                    });
+                } else {
+                    let mut writer = BufWriter::new(std::fs::File::create(op).unwrap());
+                    writer.write_all(&xml.as_bytes()).unwrap();
+                    writer.flush().unwrap();
+                }
             },
             None => {}
         }
     }
-    generate_workspace_file(con, path);
+    generate_workspace_file(con, path, clean);
 }
